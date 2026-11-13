@@ -1,0 +1,16 @@
+# Kill switch: debian-transmission may only talk via the VPN tunnel,
+# loopback, or to private/LAN addresses. Loaded by homeserver-killswitch.service.
+table inet homeserver_killswitch
+delete table inet homeserver_killswitch
+
+table inet homeserver_killswitch {
+    chain output {
+        type filter hook output priority filter; policy accept;
+
+        meta skuid != "debian-transmission" accept
+        oifname { "lo", "${VPN_DEV}" } accept
+        ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 } accept
+        ip6 daddr { fc00::/7, fe80::/10 } accept
+        counter reject
+    }
+}

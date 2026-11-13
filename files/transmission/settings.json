@@ -1,0 +1,22 @@
+{
+    "incomplete-dir-enabled": false,
+    "port-forwarding-enabled": false,
+    "lpd-enabled": false,
+    "dht-enabled": true,
+    "pex-enabled": true,
+    "utp-enabled": true,
+    "encryption": 1,
+    "umask": 2,
+    "rename-partial-files": true,
+    "start-added-torrents": true,
+    "download-queue-enabled": true,
+    "download-queue-size": 5,
+    "peer-limit-global": 200,
+    "peer-limit-per-torrent": 50,
+    "ratio-limit-enabled": false,
+    "rpc-enabled": true,
+    "rpc-bind-address": "0.0.0.0",
+    "rpc-port": 9091,
+    "rpc-whitelist-enabled": false,
+    "rpc-host-whitelist-enabled": true
+}

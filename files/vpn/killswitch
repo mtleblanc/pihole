@@ -1,0 +1,40 @@
+#!/bin/sh
+# Policy routing + nftables kill switch for the transmission user.
+# Usage: killswitch start|stop
+set -eu
+
+USER_NAME=debian-transmission
+TABLE=${VPN_ROUTE_TABLE}
+UID_=$(id -u "$USER_NAME")
+
+rules() {
+    # $1 = add|del, $2 = -4|-6
+    # 1) LAN and other non-default routes from the main table (web UI replies)
+    ip "$2" rule "$1" priority 100 uidrange "$UID_-$UID_" lookup main suppress_prefixlength 0
+    # 2) everything else via the VPN table
+    ip "$2" rule "$1" priority 101 uidrange "$UID_-$UID_" lookup "$TABLE"
+}
+
+case "${1:-}" in
+start)
+    nft -f /etc/homeserver/killswitch.nft
+    for f in -4 -6; do
+        rules del "$f" 2>/dev/null || true
+        rules del "$f" 2>/dev/null || true
+        rules add "$f"
+        # Fallback when the tunnel is down: fail, don't fall through to eth0.
+        ip "$f" route replace unreachable default metric 4278198272 table "$TABLE"
+    done
+    ;;
+stop)
+    for f in -4 -6; do
+        rules del "$f" 2>/dev/null || true
+    done
+    # The nft table is deliberately left in place: stopping this unit
+    # should never open a leak while transmission might still be running.
+    ;;
+*)
+    echo "usage: $0 start|stop" >&2
+    exit 2
+    ;;
+esac

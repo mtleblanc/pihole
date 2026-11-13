@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Fetch Nord's currently recommended OpenVPN (UDP) server and write
+# /etc/openvpn/client/nordvpn.conf. Runs before every tunnel start.
+# On any failure the previous config is kept so the tunnel can still start.
+set -euo pipefail
+
+CONF=/etc/openvpn/client/nordvpn.conf
+COUNTRY="${NORD_COUNTRY}"
+API="https://api.nordvpn.com/v1"
+
+fail() { echo "nordvpn-update-config: $*; keeping existing config" >&2; [[ -f "$CONF" ]] && exit 0; exit 1; }
+
+filter="filters[servers_technologies][identifier]=openvpn_udp&limit=5"
+if [[ -n "$COUNTRY" ]]; then
+    id=$(curl -fsS --max-time 15 "$API/servers/countries" |
+        jq -r --arg c "${COUNTRY^^}" '.[] | select(.code==$c) | .id') || fail "country lookup failed"
+    [[ -n "$id" ]] || fail "unknown country $COUNTRY"
+    filter+="&filters[country_id]=$id"
+fi
+
+# Pick randomly among the top few so a dead server isn't retried forever.
+# -g: don't treat [] in the URL as curl globs.
+host=$(curl -fsS -g --max-time 15 "$API/servers/recommendations?$filter" |
+    jq -r '.[].hostname' | shuf -n1) || fail "recommendation lookup failed"
+[[ -n "$host" ]] || fail "no servers returned"
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+curl -fsS --max-time 15 -o "$tmp" \
+    "https://downloads.nordcdn.com/configs/files/ovpn_udp/servers/$host.udp.ovpn" ||
+    fail "download of $host config failed"
+grep -q '^remote ' "$tmp" || fail "downloaded config for $host looks invalid"
+
+{
+    echo "# server: $host"
+    echo "# generated $(date -Is) by nordvpn-update-config; do not edit"
+    # Drop options we override below.
+    grep -vE '^(dev|auth-user-pass|ping|ping-restart|ping-exit|resolv-retry|persist-tun)( |$)' "$tmp"
+    cat <<'EOF'
+
+# --- homeserver overrides ---
+dev ${VPN_DEV}
+dev-type tun
+auth-user-pass /etc/openvpn/client/nordvpn.auth
+# Don't take Nord's default route / DNS: only transmission uses the tunnel.
+route-nopull
+pull-filter ignore redirect-gateway
+pull-filter ignore dhcp-option
+script-security 2
+up ${LIBEXEC}/vpn-up
+down ${LIBEXEC}/vpn-down
+# Exit (and let systemd restart on a fresh server) instead of retrying a
+# dead one forever.
+ping 15
+ping-exit 120
+tls-exit
+connect-retry-max 2
+data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305:AES-256-CBC
+EOF
+} >"$CONF.new"
+chmod 0644 "$CONF.new"
+mv "$CONF.new" "$CONF"
+echo "nordvpn-update-config: using $host"

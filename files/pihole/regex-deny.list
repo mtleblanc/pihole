@@ -1,0 +1,2 @@
+# Regex deny rules, one per line, e.g.
+# (\.|^)example\.com$

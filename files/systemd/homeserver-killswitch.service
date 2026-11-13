@@ -1,0 +1,13 @@
+[Unit]
+Description=VPN-only routing and kill switch for transmission
+Before=network-pre.target transmission-daemon.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${LIBEXEC}/killswitch start
+ExecStop=${LIBEXEC}/killswitch stop
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,4 @@
+#!/bin/sh
+# openvpn 'up' hook: route the VPN table through the tunnel.
+# $dev is set by openvpn.
+ip route replace default dev "$dev" table ${VPN_ROUTE_TABLE}

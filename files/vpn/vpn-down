@@ -1,0 +1,4 @@
+#!/bin/sh
+# openvpn 'down' hook. The 'unreachable' fallback route installed by the
+# killswitch stays in place, so transmission traffic is blocked, not leaked.
+ip route del default dev "$dev" table ${VPN_ROUTE_TABLE} 2>/dev/null || true

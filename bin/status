@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Health check for the home server. Run with sudo.
+set -uo pipefail
+
+ok()   { printf '  \033[32m✔\033[0m %s\n' "$*"; }
+bad()  { printf '  \033[31m✘\033[0m %s\n' "$*"; FAIL=1; }
+FAIL=0
+
+[[ $EUID -eq 0 ]] || { echo "run with sudo" >&2; exit 2; }
+
+echo "Services"
+mount_unit=$(systemctl list-units --type=mount --all --no-legend --plain |
+    awk '{print $1}' | while read -r u; do
+        systemctl show -p Description --value "$u" | grep -q '^External media drive$' && echo "$u"
+    done | head -1)
+for u in pihole-FTL smbd homeserver-killswitch openvpn-client@nordvpn transmission-daemon ${mount_unit:-}; do
+    if systemctl is-active --quiet "$u"; then ok "$u"; else bad "$u ($(systemctl is-active "$u"))"; fi
+done
+
+echo "Drive"
+where=$(systemctl show -p Where --value "${mount_unit:-none}" 2>/dev/null)
+if [[ -n "$where" ]] && mountpoint -q "$where"; then
+    ok "$where: $(df -h --output=used,size,pcent "$where" | tail -1 | xargs)"
+else
+    bad "media drive not mounted"
+fi
+
+echo "VPN"
+dev=$(awk '$1=="dev"{print $2}' /etc/openvpn/client/nordvpn.conf 2>/dev/null)
+server=$(awk '/^# server:/{print $3}' /etc/openvpn/client/nordvpn.conf 2>/dev/null)
+if [[ -n "$dev" ]] && ip link show "$dev" >/dev/null 2>&1; then
+    ok "tunnel $dev up ($server)"
+else
+    bad "tunnel down (server: ${server:-none})"
+fi
+
+echo "Public IPs"
+host_ip=$(curl -fsS --max-time 10 https://ipinfo.io/ip 2>/dev/null)
+tr_ip=$(setpriv --reuid=debian-transmission --regid=debian-transmission --clear-groups \
+    curl -fsS --max-time 10 https://ipinfo.io/ip 2>/dev/null)
+echo "    pi:           ${host_ip:-unreachable}"
+echo "    transmission: ${tr_ip:-blocked}"
+if [[ -z "$tr_ip" ]]; then
+    bad "transmission has no internet (kill switch engaged - is the tunnel up?)"
+elif [[ "$tr_ip" == "$host_ip" ]]; then
+    bad "LEAK: transmission is using the home IP"
+else
+    ok "transmission traffic leaves via VPN"
+fi
+
+echo "Pi-hole"
+if dig +short +time=2 @127.0.0.1 example.com >/dev/null 2>&1 ||
+   getent hosts example.com >/dev/null; then
+    ok "resolving ($(pihole-FTL --config dns.blocking.active 2>/dev/null | sed 's/true/blocking on/;s/false/blocking OFF/'))"
+else
+    bad "DNS not resolving"
+fi
+
+exit $FAIL
