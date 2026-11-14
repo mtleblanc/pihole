@@ -2,6 +2,14 @@
 
 timedatectl set-timezone "$TIMEZONE"
 
+# Locale: generate it and make it the system default.
+if ! grep -q "^${LOCALE} " /etc/locale.gen; then
+    sed -i "s/^# *\(${LOCALE} \)/\1/" /etc/locale.gen
+    grep -q "^${LOCALE} " /etc/locale.gen || echo "${LOCALE} ${LOCALE#*.}" >>/etc/locale.gen
+    locale-gen
+fi
+update-locale LANG="$LOCALE"
+
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get -y full-upgrade
 apt_install \
