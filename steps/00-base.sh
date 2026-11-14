@@ -17,3 +17,15 @@ usermod -aG "$MEDIA_GROUP" "$PI_USER"
 usermod -aG "$MEDIA_GROUP" debian-transmission
 
 install -m 0755 bin/status /usr/local/bin/homeserver-status
+
+# SSH: keys only. Refuse to lock ourselves out if the user has no keys.
+if [[ -s "$(getent passwd "$PI_USER" | cut -d: -f6)/.ssh/authorized_keys" ]]; then
+    printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' \
+        >/etc/ssh/sshd_config.d/10-homeserver.conf
+    sshd -t && systemctl reload ssh
+else
+    warn "No authorized_keys for $PI_USER; leaving SSH password login enabled."
+fi
+# Leftovers of the image's first-boot "new user" flow.
+rm -f /etc/ssh/sshd_config.d/rename_user.conf
+systemctl disable userconfig.service 2>/dev/null || true

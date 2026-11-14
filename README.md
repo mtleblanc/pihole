@@ -11,23 +11,32 @@ Reproducible setup for the Pi that provides:
 
 ## Rebuild from scratch
 
-1. **Flash** *Raspberry Pi OS Lite (64-bit)* with Raspberry Pi Imager. In its
-   settings: hostname `raspberrypi`, your username, SSH with your public key,
-   and Wi-Fi if wanted. Plug in Ethernet.
-2. **Boot and clone**:
+1. **Flash** *Raspberry Pi OS Lite (64-bit)* with Raspberry Pi Imager (no
+   customisation needed).
+2. **Prepare the card** on a Linux machine (macOS can't write the ext4
+   rootfs). Insert the card and run:
+   ```sh
+   sudo ./bootstrap/prepare-card.sh
+   ```
+   This enables the image's `pi` user with the keys in
+   [`bootstrap/authorized_keys`](bootstrap/authorized_keys), key-only login
+   and passwordless sudo, and turns on SSH. (Imager's settings didn't get
+   applied when we tried, and editing cloud-init `user-data` on bootfs has
+   no effect on this image; see the script header for details.)
+3. **Boot** with Ethernet plugged in, **then clone**:
    ```sh
    ssh <user>@raspberrypi.local
    sudo apt update && sudo apt install -y git
    git clone https://github.com/mtleblanc/pihole.git && cd pihole
    ```
-3. **Credentials**: either `cp secrets.env.example secrets.env` and fill it in,
+4. **Credentials**: either `cp secrets.env.example secrets.env` and fill it in,
    or let the installer prompt for each one. You need:
    - NordVPN **service credentials** (my.nordaccount.com → NordVPN →
      *Manual setup*), which are not your login email and password
    - a Samba password, a Pi-hole admin password, and optionally a Transmission
      web UI password
-4. **Install**: `sudo ./install.sh`
-5. **Verify**: `sudo homeserver-status`
+5. **Install**: `sudo ./install.sh`
+6. **Verify**: `sudo homeserver-status`
 
 Site settings (IP, drive UUID, mount point, VPN country, …) are in
 [`config.env`](config.env). Each step is idempotent, so after editing config
@@ -88,4 +97,5 @@ secrets.env         credentials (gitignored; see secrets.env.example)
 steps/NN-*.sh       one idempotent step per feature
 files/              templates (${VAR} substituted at install time)
 bin/status          health check → /usr/local/bin/homeserver-status
+bootstrap/          make a freshly flashed card SSH-able (run on Linux)
 ```
